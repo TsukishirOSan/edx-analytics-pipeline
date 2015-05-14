@@ -115,17 +115,24 @@ class UserVideoViewingTask(EventLogSelectionMixin, MapReduceJobTask):
                 log.warn('Seek event without valid old and new times: {0}'.format(line))
                 return
 
-        if current_time:
-            try:
-                current_time = float(current_time)
-            except TypeError:
-                log.warn('Video event with invalid currentTime type: {0}'.format(line))
-                return
+        def _check_time_offset(time_value):
+            """Check that time can be converted to a float, and has a reasonable value."""
+            if time_value:
+                try:
+                    time_value = float(time_value)
+                except TypeError:
+                    log.warn('Video event with invalid time-offset type: {0}'.format(line))
+                    return None
 
-            # Some events have ridiculous (and dangerous) values for time.
-            if current_time > VIDEO_MAXIMUM_DURATION:
-                log.warn('Video event with huge current_time value: {0}'.format(line))
-                return
+                # Some events have ridiculous (and dangerous) values for time.
+                if time_value > VIDEO_MAXIMUM_DURATION:
+                    log.warn('Video event with huge time-offset value: {0}'.format(line))
+                    return None
+
+            return time_value
+
+        current_time = _check_time_offset(current_time)
+        old_time = _check_time_offset(old_time)
 
         if youtube_id is not None:
             youtube_id = youtube_id.encode('utf8')
@@ -148,6 +155,8 @@ class UserVideoViewingTask(EventLogSelectionMixin, MapReduceJobTask):
             parsed_timestamp = ciso8601.parse_datetime(timestamp)
             if current_time is not None:
                 current_time = float(current_time)
+            if old_time is not None:
+                old_time = float(old_time)
 
             def start_viewing():
                 video_duration = VIDEO_UNKNOWN_DURATION
@@ -173,7 +182,10 @@ class UserVideoViewingTask(EventLogSelectionMixin, MapReduceJobTask):
 
             def end_viewing(end_time):
 
-                if viewing.video_duration != VIDEO_UNKNOWN_DURATION and end_time > viewing.video_duration:
+                # Check that end_time is within the bounds of the duration.
+                # Note that duration may be an int, and end_time may be a float,
+                # so just add +1 to avoid these round-off errors (instead of actually checking types).
+                if viewing.video_duration != VIDEO_UNKNOWN_DURATION and end_time > (viewing.video_duration + 1):
                     log.error('End time of viewing past end of video.\nViewing Start: %r\nEvent: %r\nKey:%r',
                               viewing, event, key)
                     return None
