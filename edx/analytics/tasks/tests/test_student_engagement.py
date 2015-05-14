@@ -8,7 +8,7 @@ from ddt import ddt, data, unpack
 from edx.analytics.tasks.student_engagement import StudentEngagementTask, SUBSECTION_VIEWED_MARKER
 from edx.analytics.tasks.tests import unittest
 from edx.analytics.tasks.tests.opaque_key_mixins import InitializeOpaqueKeysMixin, InitializeLegacyKeysMixin
-from edx.analytics.tasks.tests.map_reduce_mixins import MapperTestMixin
+from edx.analytics.tasks.tests.map_reduce_mixins import MapperTestMixin, ReducerTestMixin
 
 
 class BaseStudentEngagementTaskMapTest(InitializeOpaqueKeysMixin, MapperTestMixin, unittest.TestCase):
@@ -234,15 +234,12 @@ class StudentEngagementTaskLegacyMapTest(InitializeLegacyKeysMixin, StudentEngag
 
 
 @ddt
-class StudentEngagementTaskReducerTest(unittest.TestCase):
+class StudentEngagementTaskReducerTest(ReducerTestMixin, unittest.TestCase):
     """
     Tests to verify that engagement data is reduced properly
     """
 
-    DATE = '2013-12-17'
-    COURSE_ID = 'foo/bar/baz'
-    USERNAME = 'test_user'
-    REDUCE_KEY = (DATE, COURSE_ID, USERNAME)
+    task_class = StudentEngagementTask
 
     WAS_ACTIVE_COLUMN = 3
     PROBLEMS_ATTEMPTED_COLUMN = 4
@@ -256,20 +253,9 @@ class StudentEngagementTaskReducerTest(unittest.TestCase):
     LAST_SUBSECTION_COLUMN = 12
 
     def setUp(self):
-        fake_param = luigi.DateIntervalParameter()
-        self.task = StudentEngagementTask(
-            interval=fake_param.parse(self.DATE),
-            output_root='/fake/output'
-        )
-        self.task.init_local()
+        super(StudentEngagementTaskReducerTest, self).setUp()
 
-    def test_no_events(self):
-        output = self._get_reducer_output([])
-        self.assertEquals(len(output), 0)
-
-    def _get_reducer_output(self, inputs):
-        """Run the reducer and return the ouput"""
-        return tuple(self.task.reducer(self.REDUCE_KEY, inputs))
+        self.reduce_key = (self.DATE, self.COURSE_ID, self.USERNAME)
 
     def test_any_activity(self):
         inputs = [
@@ -287,13 +273,6 @@ class StudentEngagementTaskReducerTest(unittest.TestCase):
             self.TEXTBOOK_PAGES_COLUMN: 0,
             self.LAST_SUBSECTION_COLUMN: '',
         })
-
-    def _check_output(self, inputs, column_values):
-        """Compare generated with expected output."""
-        output = self._get_reducer_output(inputs)
-        self.assertEquals(len(output), 1)
-        for column_num, expected_value in column_values.iteritems():
-            self.assertEquals(output[0][column_num], expected_value)
 
     def test_single_problem_attempted(self):
         inputs = [

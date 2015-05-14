@@ -56,3 +56,37 @@ class MapperTestMixin(object):
             tuple(self.task.mapper(line)),
             tuple()
         )
+
+
+class ReducerTestMixin(object):
+    """Base class for reduce function tests"""
+
+    DATE = '2013-12-17'
+    COURSE_ID = 'foo/bar/baz'
+    USERNAME = 'test_user'
+
+    reduce_key = tuple()
+    task_class = None
+
+    def setUp(self):
+        self.task = self.task_class(
+            interval=luigi.DateIntervalParameter().parse(self.DATE),
+            output_root='/fake/output',
+        )
+        self.task.init_local()
+        self.reduce_key = tuple()
+
+    def test_no_events(self):
+        output = self._get_reducer_output([])
+        self.assertEquals(len(output), 0)
+
+    def _get_reducer_output(self, inputs):
+        """Run the reducer and return the output"""
+        return tuple(self.task.reducer(self.reduce_key, inputs))
+
+    def _check_output(self, inputs, column_values):
+        """Compare generated with expected output."""
+        output = self._get_reducer_output(inputs)
+        self.assertEquals(len(output), 1)
+        for column_num, expected_value in column_values.iteritems():
+            self.assertEquals(output[0][column_num], expected_value)
