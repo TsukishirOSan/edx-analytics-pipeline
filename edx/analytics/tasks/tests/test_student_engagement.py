@@ -8,9 +8,10 @@ from ddt import ddt, data, unpack
 from edx.analytics.tasks.student_engagement import StudentEngagementTask, SUBSECTION_VIEWED_MARKER
 from edx.analytics.tasks.tests import unittest
 from edx.analytics.tasks.tests.opaque_key_mixins import InitializeOpaqueKeysMixin, InitializeLegacyKeysMixin
+from edx.analytics.tasks.tests.map_reduce_mixins import MapperTestMixin
 
 
-class BaseStudentEngagementTaskMapTest(InitializeOpaqueKeysMixin, unittest.TestCase):
+class BaseStudentEngagementTaskMapTest(InitializeOpaqueKeysMixin, MapperTestMixin, unittest.TestCase):
     """Base class for test analysis of detailed student engagement"""
 
     DEFAULT_USER_ID = 10
@@ -18,6 +19,8 @@ class BaseStudentEngagementTaskMapTest(InitializeOpaqueKeysMixin, unittest.TestC
     DEFAULT_DATE = "2013-12-17"
 
     def setUp(self):
+        super(BaseStudentEngagementTaskMapTest, self).setUp()
+
         self.initialize_ids()
         self.video_id = 'i4x-foo-bar-baz'
         self.event_templates = {
@@ -57,6 +60,7 @@ class BaseStudentEngagementTaskMapTest(InitializeOpaqueKeysMixin, unittest.TestC
                 "page": None
             }
         }
+        self.default_event_template = 'problem_check'
         self.default_key = (self.DEFAULT_DATE, self.course_id, 'test_user')
 
     def create_task(self, interval=None, interval_type=None):
@@ -69,35 +73,6 @@ class BaseStudentEngagementTaskMapTest(InitializeOpaqueKeysMixin, unittest.TestC
             interval_type=interval_type,
         )
         self.task.init_local()
-
-    def create_event_log_line(self, **kwargs):
-        """Create an event log with test values, as a JSON string."""
-        return json.dumps(self._create_event_dict(**kwargs))
-
-    def _create_event_dict(self, **kwargs):
-        """Create an event log with test values, as a dict."""
-        # Define default values for event log entry.
-        # event_dict = kwargs.pop('template', self.event_templates['play_video']).copy()
-        event_dict = kwargs.pop('template', self.event_templates['problem_check']).copy()
-        event_dict.update(**kwargs)
-        return event_dict
-
-    def assert_single_map_output(self, line, expected_key, expected_value):
-        """Assert that an input line generates exactly one output record with the expected key and value"""
-        mapper_output = tuple(self.task.mapper(line))
-        self.assertEquals(len(mapper_output), 1)
-        row = mapper_output[0]
-        self.assertEquals(len(row), 2)
-        actual_key, actual_value = row
-        self.assertEquals(expected_key, actual_key)
-        self.assertEquals(expected_value, actual_value)
-
-    def assert_no_map_output_for(self, line):
-        """Assert that an input line generates no output."""
-        self.assertEquals(
-            tuple(self.task.mapper(line)),
-            tuple()
-        )
 
     def assert_date_mappings(self, expected_end_date, actual_event_date):
         """Asserts that an event_date is mapped to the expected date in the key."""
