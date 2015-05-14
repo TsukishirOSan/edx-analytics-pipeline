@@ -201,7 +201,7 @@ class UserVideoViewingTask(EventLogSelectionMixin, MapReduceJobTask):
                     record = end_viewing(viewing_end_time)
                     if record:
                         yield record
-                viewing = None
+                    viewing = None
             else:
                 # this is a non-play event outside of a viewing
                 pass

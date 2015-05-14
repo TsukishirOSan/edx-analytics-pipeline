@@ -281,6 +281,18 @@ class UserVideoViewingTaskReducerTest(ReducerTestMixin, unittest.TestCase):
             Columns.REASON: 'pause_video'
         })
 
+    def test_ordering(self):
+        inputs = [
+            ('2013-12-17T00:00:03.00000Z', 'pause_video', 3, None, 'html5'),
+            ('2013-12-17T00:00:00.00000Z', 'play_video', 0, None, 'html5'),
+        ]
+        self._check_output(inputs, {
+            Columns.START_TIMESTAMP: '2013-12-17T00:00:00+00:00',
+            Columns.START_OFFSET: 0,
+            Columns.END_OFFSET: 3,
+            Columns.REASON: 'pause_video'
+        })
+
     def test_viewing_with_sci_notation(self):
         inputs = [
             ('2013-12-17T00:00:00.00000Z', 'play_video', 0, None, 'html5'),
@@ -289,3 +301,142 @@ class UserVideoViewingTaskReducerTest(ReducerTestMixin, unittest.TestCase):
         self._check_output(inputs, {
             Columns.END_OFFSET: 120
         })
+
+    def test_multiple_viewings(self):
+        inputs = [
+            ('2013-12-17T00:00:00.00000Z', 'play_video', 0, None, 'html5'),
+            ('2013-12-17T00:00:03.00000Z', 'pause_video', 3, None, 'html5'),
+            ('2013-12-17T00:00:07.00000Z', 'play_video', 0, None, 'html5'),
+            ('2013-12-17T00:00:12.00000Z', 'stop_video', 5, None, 'html5'),
+        ]
+        self._check_output(inputs, [
+            {
+                Columns.START_TIMESTAMP: '2013-12-17T00:00:00+00:00',
+                Columns.START_OFFSET: 0,
+                Columns.END_OFFSET: 3,
+                Columns.REASON: 'pause_video'
+            },
+            {
+                Columns.START_TIMESTAMP: '2013-12-17T00:00:07+00:00',
+                Columns.START_OFFSET: 0,
+                Columns.END_OFFSET: 5,
+                Columns.REASON: 'stop_video'
+            }
+        ])
+
+    def test_seek(self):
+        inputs = [
+            ('2013-12-17T00:00:00.00000Z', 'play_video', 0, None, 'html5'),
+            ('2013-12-17T00:00:03.00000Z', 'seek_video', 2, 3, 'html5'),
+            ('2013-12-17T00:00:03.10000Z', 'play_video', 2, None, 'html5'),
+            ('2013-12-17T00:00:06.00000Z', 'pause_video', 5, None, 'html5'),
+        ]
+        self._check_output(inputs, [
+            {
+                Columns.START_TIMESTAMP: '2013-12-17T00:00:00+00:00',
+                Columns.START_OFFSET: 0,
+                Columns.END_OFFSET: 3,
+                Columns.REASON: 'seek_video'
+            },
+            {
+                Columns.START_TIMESTAMP: '2013-12-17T00:00:03.100000+00:00',
+                Columns.START_OFFSET: 2,
+                Columns.END_OFFSET: 5,
+                Columns.REASON: 'pause_video'
+            }
+        ])
+
+    def test_play_after_seek_forward_bug(self):
+        inputs = [
+            ('2013-12-17T00:00:00.00000Z', 'play_video', 0, None, 'html5'),
+            ('2013-12-17T00:00:03.00000Z', 'seek_video', 8, 3, 'html5'),
+            ('2013-12-17T00:00:03.10000Z', 'play_video', 3, None, 'html5'),
+            ('2013-12-17T00:00:06.00000Z', 'pause_video', 11, None, 'html5'),
+        ]
+        self._check_output(inputs, [
+            {
+                Columns.START_TIMESTAMP: '2013-12-17T00:00:00+00:00',
+                Columns.START_OFFSET: 0,
+                Columns.END_OFFSET: 3,
+            },
+            {
+                Columns.START_TIMESTAMP: '2013-12-17T00:00:03.100000+00:00',
+                Columns.START_OFFSET: 8,
+                Columns.END_OFFSET: 11,
+            }
+        ])
+
+    def test_debounce_play(self):
+        inputs = [
+            ('2013-12-17T00:00:00.00000Z', 'play_video', 0, None, 'html5'),
+            ('2013-12-17T00:00:00.10000Z', 'play_video', 0, None, 'html5'),
+            ('2013-12-17T00:00:00.20000Z', 'play_video', 0, None, 'html5'),
+            ('2013-12-17T00:00:00.30000Z', 'play_video', 0, None, 'html5'),
+            ('2013-12-17T00:00:00.40000Z', 'play_video', 0, None, 'html5'),
+            ('2013-12-17T00:00:00.50000Z', 'play_video', 0, None, 'html5'),
+            ('2013-12-17T00:00:00.60000Z', 'play_video', 0, None, 'html5'),
+            ('2013-12-17T00:00:03.00000Z', 'pause_video', 3, None, 'html5'),
+        ]
+        self._check_output(inputs, {
+            Columns.START_TIMESTAMP: '2013-12-17T00:00:00.600000+00:00',
+            Columns.START_OFFSET: 0,
+            Columns.END_OFFSET: 3,
+        })
+
+    def test_ignored_events(self):
+        inputs = [
+            ('2013-12-17T00:00:01.00000Z', 'seek_video', 2, None, 'html5'),
+            ('2013-12-17T00:00:02.00000Z', 'pause_video', 1, None, 'html5'),
+            ('2013-12-17T00:00:03.00000Z', 'play_video', 0, None, 'html5'),
+            ('2013-12-17T00:00:06.00000Z', 'pause_video', 3, None, 'html5'),
+            ('2013-12-17T00:00:07.00000Z', 'pause_video', 1, None, 'html5'),
+        ]
+        self._check_output(inputs, {
+            Columns.START_TIMESTAMP: '2013-12-17T00:00:03+00:00',
+            Columns.START_OFFSET: 0,
+            Columns.END_OFFSET: 3,
+        })
+
+    def test_missing_end_event(self):
+        inputs = [
+            ('2013-12-17T00:00:00.00000Z', 'play_video', 0, None, 'html5'),
+        ]
+        self.assert_no_output(inputs)
+
+    def test_unexpected_event(self):
+        inputs = [
+            ('2013-12-17T00:00:03.00000Z', 'play_video', 0, None, 'html5'),
+            ('2013-12-17T00:00:05.00000Z', '/foobar', None, None, None),
+            ('2013-12-17T00:00:06.00000Z', 'pause_video', 3, None, 'html5'),
+        ]
+        self._check_output(inputs, {
+            Columns.START_TIMESTAMP: '2013-12-17T00:00:03+00:00',
+            Columns.START_OFFSET: 0,
+            Columns.END_OFFSET: 3,
+        })
+
+
+
+SAMPLE_YOUTUBE_RESPONSE = """{
+ "kind": "youtube#videoListResponse",
+ "etag": "\"tbWC5XrSXxe1WOAx6MK9z4hHSU8/U18cvGr7ajKhffqbJnnrvHvXOOc\"",
+ "pageInfo": {
+  "totalResults": 1,
+  "resultsPerPage": 1
+ },
+ "items": [
+  {
+   "kind": "youtube#video",
+   "etag": "\"tbWC5XrSXxe1WOAx6MK9z4hHSU8/Uvha7bYP7IquCqUCznX-iZDBTfI\"",
+   "id": "9bZkp7q19f0",
+   "contentDetails": {
+    "duration": "PT4M13S",
+    "dimension": "2d",
+    "definition": "hd",
+    "caption": "false",
+    "licensedContent": true
+   }
+  }
+ ]
+}
+"""

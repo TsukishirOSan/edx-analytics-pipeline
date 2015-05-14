@@ -76,8 +76,8 @@ class ReducerTestMixin(object):
         self.task.init_local()
         self.reduce_key = tuple()
 
-    def test_no_events(self):
-        output = self._get_reducer_output([])
+    def assert_no_output(self, input):
+        output = self._get_reducer_output(input)
         self.assertEquals(len(output), 0)
 
     def _get_reducer_output(self, inputs):
@@ -87,6 +87,10 @@ class ReducerTestMixin(object):
     def _check_output(self, inputs, column_values):
         """Compare generated with expected output."""
         output = self._get_reducer_output(inputs)
-        self.assertEquals(len(output), 1)
-        for column_num, expected_value in column_values.iteritems():
-            self.assertEquals(output[0][column_num], expected_value)
+        if not isinstance(column_values, list):
+            column_values = [column_values]
+        output = list(output)
+        self.assertEquals(len(output), len(column_values))
+        for output_tuple, expected_columns in zip(output, column_values):
+            for column_num, expected_value in expected_columns.iteritems():
+                self.assertEquals(output_tuple[column_num], expected_value)
